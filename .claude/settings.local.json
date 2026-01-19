@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(swift build:*)",
+      "Bash(pgrep:*)",
+      "Bash(osascript:*)",
+      "Bash(osascript -e 'tell application \"\"CursorHome\"\" to activate' -e 'tell application \"\"System Events\"\" to keystroke \"\",\"\" using command down')",
+      "Bash(pkill:*)"
+    ]
+  }
+}
