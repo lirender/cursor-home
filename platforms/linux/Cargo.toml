@@ -57,8 +57,8 @@ ksni = "0.2"
 # Event loop integration
 calloop = "0.12"
 
-# X11 support for cursor position query
-x11rb = { version = "0.13", features = ["allow-unsafe-code"] }
+# X11 support for cursor position query and ARGB overlay
+x11rb = { version = "0.13", features = ["allow-unsafe-code", "render", "shape"] }
 
 [profile.release]
 lto = true

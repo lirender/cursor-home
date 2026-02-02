@@ -10,31 +10,45 @@ Type=x11
 
 This significantly simplifies cursor tracking but changes our approach.
 
-## X11 Cursor Position Tracking
+## X11 ARGB Overlay - WORKING
 
-Successfully implemented using `x11rb` crate:
+Successfully implemented transparent overlay using X11's 32-bit ARGB visual:
 
 ```rust
-use x11rb::connection::Connection;
-use x11rb::protocol::xproto::*;
+use x11rb::protocol::render::{ConnectionExt as RenderConnectionExt, PictType};
 
-fn get_x11_cursor_position() -> Option<(f64, f64)> {
-    let (conn, screen_num) = x11rb::connect(None).ok()?;
-    let screen = &conn.setup().roots[screen_num];
-    let root = screen.root;
+fn find_argb_visual(conn: &RustConnection, screen_num: usize) -> Result<(Visualid, u8)> {
+    let formats = conn.render_query_pict_formats()?.reply()?;
 
-    query_pointer(&conn, root)
-        .ok()
-        .and_then(|cookie| cookie.reply().ok())
-        .map(|reply| (reply.root_x as f64, reply.root_y as f64))
+    for format in &formats.formats {
+        if format.depth == 32 && format.type_ == PictType::DIRECT {
+            if format.direct.alpha_mask > 0 {
+                // Find visual using this format...
+            }
+        }
+    }
 }
 ```
 
-This provides reliable global cursor position at any time - no need for motion event tracking.
+Key settings for transparent overlay:
+- `background_pixel(0)` - Transparent background
+- `override_redirect(1)` - No window manager decoration
+- Use shape extension to make click-through: `shape_rectangles(SO::SET, SK::INPUT, ...)`
 
-## Synergy 3 Integration
+## X11 Cursor Position Tracking - WORKING
 
-Working implementation monitors Synergy log file:
+```rust
+fn get_cursor_position(&self) -> Result<(i16, i16)> {
+    let screen = &self.conn.setup().roots[self.screen_num];
+    self.conn.query_pointer(screen.root)?
+        .reply()
+        .map(|r| (r.root_x, r.root_y))
+}
+```
+
+## Synergy 3 Integration - WORKING
+
+Monitors Synergy log file for cursor transitions:
 - **Log location**: `~/.var/app/com.symless.synergy/.local/state/Synergy/synergy.log` (Flatpak)
 - **Events detected**:
   - "entering", "switch from", "switching from" → CursorReturned
@@ -42,42 +56,37 @@ Working implementation monitors Synergy log file:
 - Uses `notify` crate for file watching
 - Uses `glib::MainContext::channel` for thread-safe GTK communication
 
-## Current Issues
+## Current Status
 
-### Overlay Window Blocks Screen
-The fullscreen GTK4 window overlay is not transparent - it blocks the entire screen when visible.
+### Working
+- X11 ARGB transparent overlay
+- Cursor position tracking (follows mouse)
+- Synergy transition detection triggers highlight
+- Click-through overlay (can interact with apps behind it)
+- Animation loop at 60fps
 
-**Root cause**: GTK4 window transparency requires:
-1. RGBA visual support
-2. Compositor with transparency support
-3. Proper window type hints
+### Not Working / TODO
+- **Ubuntu shake detection**: ShakeDetector stub exists but doesn't track mouse
+- **macOS shake detection broken**: Recent fix to skip non-local cursor broke shake entirely
 
-**Attempted approaches that didn't work**:
-- `window.set_opacity(1.0)` - controls window opacity, not content transparency
-- Cairo `Operator::Clear` - clears to transparent but window background still shows
+## macOS Shake Detection Issue
 
-### Potential Solutions
+The fix to prevent Mac highlight when cursor is on Ubuntu was too aggressive:
+```swift
+// This check is probably too strict
+let isOnLocalScreen = NSScreen.screens.contains { $0.frame.contains(currentLocation) }
+if !isOnLocalScreen {
+    previousLocations.removeAll()
+    return
+}
+```
 
-1. **Use X11 directly for overlay** (recommended for X11):
-   - Create override-redirect window with ARGB visual
-   - Use Xcomposite extension for true transparency
-   - More control but bypasses GTK
+The issue might be that `NSEvent.mouseLocation` returns coordinates that don't perfectly match `NSScreen.frame` bounds, especially near edges or with Synergy active.
 
-2. **GTK4 with proper visual setup**:
-   ```rust
-   // Need to set up RGBA visual before window creation
-   // GTK4 should auto-detect but may need explicit setup
-   ```
-
-3. **Use cairo-xlib directly**:
-   - Create X11 window with 32-bit depth
-   - Draw with cairo directly
-   - Full transparency control
-
-4. **Shaped window approach**:
-   - Instead of transparency, use X11 shape extension
-   - Only show the highlight circle region
-   - Window is shaped to match highlight bounds
+**Possible fixes:**
+1. Add small tolerance to screen bounds check
+2. Only skip if cursor is CLEARLY outside all screens (by significant margin)
+3. Use a different method to detect if Synergy has control
 
 ## Display Configuration
 
@@ -86,60 +95,24 @@ Ubuntu display is portrait mode:
 - Center: (1080, 1920)
 - Connected via HDMI-0
 
-## Architecture That Works
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Main GTK4 App                         │
-├─────────────────────────────────────────────────────────┤
-│  SynergyMonitor                                          │
-│  - Watches log file with notify crate                   │
-│  - Sends events via glib channel                        │
-│  - Triggers highlight on CursorReturned                 │
-├─────────────────────────────────────────────────────────┤
-│  CursorFinderService                                     │
-│  - Creates HighlightOverlay on demand                   │
-│  - Passes style/animation settings                      │
-├─────────────────────────────────────────────────────────┤
-│  HighlightOverlay (NEEDS REWORK)                        │
-│  - X11 cursor position query works                      │
-│  - Animation loop at 60fps works                        │
-│  - Transparency NOT working                             │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Dependencies That Work
+## Dependencies
 
 ```toml
+x11rb = { version = "0.13", features = ["allow-unsafe-code", "render", "shape"] }
 gtk4 = "0.7"
 libadwaita = "0.5"
-x11rb = "0.13"           # X11 cursor position
-notify = "6"             # File watching
-regex = "1"              # Log parsing
-glib channels            # Thread-safe GTK communication
+notify = "6"        # File watching
+regex = "1"         # Log parsing
 ```
 
-## Next Steps
-
-1. **Fix overlay transparency** - either:
-   - Pure X11 ARGB window (most reliable)
-   - GTK4 with proper RGBA setup
-   - X11 shaped window
-
-2. **Consider alternative approaches**:
-   - Desktop notification with icon instead of overlay
-   - Smaller non-fullscreen window that follows cursor
-   - System compositor effects (if available)
-
-## Environment Variables for Running
+## Environment Variables
 
 ```bash
 DISPLAY=:1 RUST_LOG=info ./target/debug/cursorhome
 ```
 
-## Files Modified
+## Next Steps
 
-- `platforms/linux/Cargo.toml` - Added x11rb dependency
-- `platforms/linux/src/ui/highlight_overlay.rs` - X11 cursor tracking
-- `platforms/linux/src/services/synergy_monitor.rs` - glib channel for thread safety
-- `platforms/linux/src/app.rs` - Service flag and hold guard for background running
+1. **Fix macOS shake detection** - Add tolerance to screen bounds check
+2. **Implement Ubuntu shake detection** - Add X11 mouse polling loop
+3. **Test animation styles** - Currently only simple circle, verify pulse/fade/etc work

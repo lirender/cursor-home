@@ -1,21 +1,20 @@
 //! Cursor finder service
 //!
-//! Handles cursor highlighting on Wayland.
+//! Handles cursor highlighting using X11 ARGB overlay.
 
-use crate::models::Preferences;
+use crate::models::{AnimationStyle, CursorStyle, Preferences};
 use crate::services::DisplayManager;
-use crate::ui::HighlightOverlay;
+use crate::ui::X11Overlay;
 use anyhow::Result;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 
 /// Service for finding and highlighting the cursor
 pub struct CursorFinderService {
     preferences: Arc<Preferences>,
     display_manager: DisplayManager,
-    overlay: Option<HighlightOverlay>,
-    last_known_position: Option<(f64, f64)>,
+    is_highlighting: Arc<AtomicBool>,
 }
 
 impl CursorFinderService {
@@ -24,8 +23,7 @@ impl CursorFinderService {
         Self {
             preferences,
             display_manager: DisplayManager::new(),
-            overlay: None,
-            last_known_position: None,
+            is_highlighting: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -35,85 +33,38 @@ impl CursorFinderService {
             return;
         }
 
-        // On Wayland, we can't get the global cursor position directly
-        // We rely on pointer motion events to track position
-        let position = self.last_known_position.unwrap_or_else(|| {
-            // Fall back to center of primary display
-            if let Some(display) = self.display_manager.primary_display() {
-                let (cx, cy) = display.center();
-                (cx as f64, cy as f64)
-            } else {
-                (960.0, 540.0)
-            }
-        });
-
-        self.show_highlight_at(position.0, position.1);
-    }
-
-    /// Update the tracked cursor position
-    pub fn update_cursor_position(&mut self, x: f64, y: f64) {
-        self.last_known_position = Some((x, y));
-
-        // If overlay is visible, update its position
-        if let Some(overlay) = &mut self.overlay {
-            overlay.update_position(x, y);
+        // Don't start a new highlight if one is already running
+        if self.is_highlighting.load(Ordering::SeqCst) {
+            tracing::debug!("Highlight already in progress, skipping");
+            return;
         }
-    }
 
-    /// Show highlight at a specific position
-    pub fn show_highlight_at(&mut self, x: f64, y: f64) {
-        tracing::info!("Showing highlight at ({}, {})", x, y);
+        // Clone values for the thread
+        let is_highlighting = self.is_highlighting.clone();
+        let cursor_style = self.preferences.cursor_style.clone();
+        let animation_style = self.preferences.animation_style.clone();
+        let duration = self.preferences.highlight_duration;
 
-        // Create or update overlay
-        if self.overlay.is_none() {
-            tracing::info!("Creating new highlight overlay");
-            match HighlightOverlay::new() {
-                Ok(overlay) => {
-                    tracing::info!("Highlight overlay created successfully");
-                    self.overlay = Some(overlay);
+        // Run the highlight in a separate thread (X11 overlay has blocking animation)
+        thread::spawn(move || {
+            is_highlighting.store(true, Ordering::SeqCst);
+
+            match X11Overlay::new() {
+                Ok(mut overlay) => {
+                    tracing::info!("X11 overlay created, starting highlight");
+                    if let Err(e) = overlay.show_highlight(&cursor_style, &animation_style, duration)
+                    {
+                        tracing::error!("Error during highlight: {}", e);
+                    }
                 }
                 Err(e) => {
-                    tracing::error!("Failed to create highlight overlay: {}", e);
-                    return;
+                    tracing::error!("Failed to create X11 overlay: {}", e);
                 }
             }
-        }
 
-        if let Some(overlay) = &mut self.overlay {
-            overlay.show(
-                x,
-                y,
-                &self.preferences.cursor_style,
-                &self.preferences.animation_style,
-                self.preferences.highlight_duration,
-            );
-        }
-    }
-
-    /// Hide any active highlight
-    pub fn hide_highlight(&mut self) {
-        if let Some(overlay) = &mut self.overlay {
-            overlay.hide();
-        }
-    }
-
-    /// Center cursor on primary display (Wayland limitation)
-    pub fn center_on_primary(&mut self) -> Result<()> {
-        let display = self
-            .display_manager
-            .primary_display()
-            .ok_or_else(|| anyhow::anyhow!("No primary display found"))?;
-
-        let (cx, cy) = display.center();
-
-        // On Wayland, we can't actually move the cursor
-        // Instead, we just show the highlight at the center
-        tracing::warn!(
-            "Cursor warping is not supported on Wayland. Showing highlight at center instead."
-        );
-
-        self.show_highlight_at(cx as f64, cy as f64);
-        Ok(())
+            is_highlighting.store(false, Ordering::SeqCst);
+            tracing::info!("Highlight complete");
+        });
     }
 
     /// Refresh display information
