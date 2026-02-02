@@ -47,8 +47,11 @@ pub fn run() -> Result<()> {
     // Initialize libadwaita
     adw::init()?;
 
-    // Create application
-    let app = Application::builder().application_id(APP_ID).build();
+    // Create application as a service (stays running without windows)
+    let app = Application::builder()
+        .application_id(APP_ID)
+        .flags(gio::ApplicationFlags::IS_SERVICE)
+        .build();
 
     // Connect startup signal
     app.connect_startup(|app| {
@@ -56,11 +59,12 @@ pub fn run() -> Result<()> {
         setup_app(app);
     });
 
+    // Hold the application to prevent exit (for background/tray apps)
+    let _hold_guard = app.hold();
+
     // Connect activate signal
-    app.connect_activate(|app| {
+    app.connect_activate(|_app| {
         tracing::info!("Application activated");
-        // For a menu bar app, we don't show a window on activate
-        // The tray icon handles all interaction
     });
 
     // Run the application
@@ -91,34 +95,24 @@ fn setup_app(app: &Application) {
     tracing::info!("CursorHome initialized successfully");
 }
 
-fn setup_tray_icon(app: &Application, state: Rc<AppState>) {
+fn setup_tray_icon(_app: &Application, state: Rc<AppState>) {
     let tray = TrayIcon::new(state.clone());
-
-    // Keep the tray icon alive for the app lifetime
-    // In a real implementation, we'd store this in the app state
-    glib::spawn_future_local(async move {
-        tray.run().await;
-    });
+    tray.init();
 }
 
 fn setup_synergy_monitoring(state: Rc<AppState>) {
     let state_clone = state.clone();
 
-    // Start monitoring Synergy
+    // Start monitoring Synergy with callback
     let mut monitor = state.synergy_monitor.borrow_mut();
-    monitor.set_on_cursor_returned(Box::new(move |screen_name| {
-        tracing::info!("Cursor returned from {}", screen_name);
+    let result = monitor.start_with_callback(move |screen_name| {
+        tracing::info!("Cursor returned from {} - triggering highlight", screen_name);
+        if state_clone.preferences.enabled {
+            state_clone.cursor_finder.borrow_mut().find_cursor();
+        }
+    });
 
-        // Trigger cursor highlight when returning from remote
-        let state = state_clone.clone();
-        glib::idle_add_local_once(move || {
-            if state.preferences.enabled {
-                state.cursor_finder.borrow_mut().find_cursor();
-            }
-        });
-    }));
-
-    if let Err(e) = monitor.start() {
+    if let Err(e) = result {
         tracing::warn!("Failed to start Synergy monitoring: {}", e);
     }
 }

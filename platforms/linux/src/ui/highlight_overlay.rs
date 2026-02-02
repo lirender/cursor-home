@@ -1,15 +1,15 @@
-//! Highlight overlay window
+//! Highlight overlay window using X11 cursor tracking
 //!
-//! Creates a transparent overlay window to display cursor highlighting.
-//! Uses the wlr-layer-shell protocol on Wayland for proper overlay behavior.
+//! Creates a transparent fullscreen overlay that tracks pointer position
+//! and draws the cursor highlight.
 
-use crate::models::{AnimationStyle, AnimationType, CursorStyle, Easing, Shape};
+use crate::models::{AnimationStyle, AnimationType, CursorStyle, Shape};
 use anyhow::Result;
 use gtk4::cairo::{self, Context};
 use gtk4::gdk;
-use gtk4::glib::{self, clone, ControlFlow};
+use gtk4::glib::{self, ControlFlow};
 use gtk4::prelude::*;
-use gtk4::{DrawingArea, Window, WindowType};
+use gtk4::DrawingArea;
 use std::cell::{Cell, RefCell};
 use std::f64::consts::PI;
 use std::rc::Rc;
@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 pub struct HighlightOverlay {
     window: gtk4::Window,
     drawing_area: DrawingArea,
-    position: Rc<Cell<(f64, f64)>>,
+    cursor_position: Rc<Cell<(f64, f64)>>,
     style: Rc<RefCell<CursorStyle>>,
     animation: Rc<RefCell<AnimationState>>,
     is_visible: Rc<Cell<bool>>,
@@ -28,7 +28,6 @@ pub struct HighlightOverlay {
 struct AnimationState {
     style: AnimationStyle,
     start_time: Option<Instant>,
-    current_cycle: u32,
     progress: f64,
     is_reversing: bool,
 }
@@ -38,39 +37,78 @@ impl Default for AnimationState {
         Self {
             style: AnimationStyle::default(),
             start_time: None,
-            current_cycle: 0,
             progress: 0.0,
             is_reversing: false,
         }
     }
 }
 
+/// Query the current cursor position using X11
+fn get_x11_cursor_position() -> Option<(f64, f64)> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::*;
+
+    // Connect to X11
+    let (conn, screen_num) = match x11rb::connect(None) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!("Failed to connect to X11: {}", e);
+            return None;
+        }
+    };
+
+    let screen = &conn.setup().roots[screen_num];
+    let root = screen.root;
+
+    // Query pointer position - get the reply immediately to avoid lifetime issues
+    let result = query_pointer(&conn, root)
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| (reply.root_x as f64, reply.root_y as f64));
+
+    result
+}
+
 impl HighlightOverlay {
     /// Create a new highlight overlay
     pub fn new() -> Result<Self> {
-        // Create a transparent, click-through window
+        // Create a fullscreen transparent window
         let window = gtk4::Window::builder()
             .title("CursorHome Highlight")
             .decorated(false)
             .resizable(false)
-            .deletable(false)
             .build();
 
-        // Make window transparent
-        if let Some(display) = gdk::Display::default() {
-            // Set visual for transparency
-            window.set_opacity(1.0);
-        }
+        // Try to make it fullscreen and transparent
+        window.set_opacity(0.0); // Start invisible
 
-        // Create drawing area
+        // Get screen dimensions
+        let (screen_width, screen_height) = if let Some(display) = gdk::Display::default() {
+            if let Some(monitor) = display
+                .monitors()
+                .item(0)
+                .and_then(|m| m.downcast::<gdk::Monitor>().ok())
+            {
+                let geom = monitor.geometry();
+                (geom.width(), geom.height())
+            } else {
+                (2160, 3840)
+            }
+        } else {
+            (2160, 3840)
+        };
+
+        window.set_default_size(screen_width, screen_height);
+
+        // Create drawing area that fills the window
         let drawing_area = DrawingArea::new();
-        drawing_area.set_content_width(400);
-        drawing_area.set_content_height(400);
+        drawing_area.set_hexpand(true);
+        drawing_area.set_vexpand(true);
 
         window.set_child(Some(&drawing_area));
 
         // Shared state
-        let position = Rc::new(Cell::new((0.0, 0.0)));
+        let cursor_position = Rc::new(Cell::new((screen_width as f64 / 2.0, screen_height as f64 / 2.0)));
         let style = Rc::new(RefCell::new(CursorStyle::default()));
         let animation = Rc::new(RefCell::new(AnimationState::default()));
         let is_visible = Rc::new(Cell::new(false));
@@ -78,30 +116,40 @@ impl HighlightOverlay {
         // Set up drawing
         let style_clone = style.clone();
         let animation_clone = animation.clone();
-        let position_clone = position.clone();
+        let cursor_pos_draw = cursor_position.clone();
+        let is_visible_draw = is_visible.clone();
 
-        drawing_area.set_draw_func(move |_area, cr, width, height| {
-            Self::draw(
+        drawing_area.set_draw_func(move |_area, cr, _width, _height| {
+            // Clear to transparent
+            cr.set_operator(cairo::Operator::Clear);
+            cr.paint().ok();
+            cr.set_operator(cairo::Operator::Over);
+
+            if !is_visible_draw.get() {
+                return;
+            }
+
+            let (cursor_x, cursor_y) = cursor_pos_draw.get();
+            Self::draw_highlight(
                 cr,
-                width,
-                height,
+                cursor_x,
+                cursor_y,
                 &style_clone.borrow(),
                 &animation_clone.borrow(),
-                position_clone.get(),
             );
         });
 
         Ok(Self {
             window,
             drawing_area,
-            position,
+            cursor_position,
             style,
             animation,
             is_visible,
         })
     }
 
-    /// Show the highlight at a position
+    /// Show the highlight
     pub fn show(
         &mut self,
         x: f64,
@@ -110,7 +158,7 @@ impl HighlightOverlay {
         animation_style: &AnimationStyle,
         duration: f64,
     ) {
-        self.position.set((x, y));
+        self.cursor_position.set((x, y));
         *self.style.borrow_mut() = style.clone();
 
         // Reset animation state
@@ -118,49 +166,43 @@ impl HighlightOverlay {
             let mut anim = self.animation.borrow_mut();
             anim.style = animation_style.clone();
             anim.start_time = Some(Instant::now());
-            anim.current_cycle = 0;
             anim.progress = 0.0;
             anim.is_reversing = false;
         }
 
-        // Position window centered on cursor
-        let window_size = (style.size as i32 + 100).max(200);
-        self.drawing_area.set_content_width(window_size);
-        self.drawing_area.set_content_height(window_size);
-
-        // Move window to cursor position (offset to center)
-        let offset = window_size / 2;
-        self.window
-            .set_default_size(window_size, window_size);
-
-        // Note: On Wayland, window positioning is restricted
-        // The layer-shell protocol would be needed for proper overlay positioning
-
-        self.window.present();
         self.is_visible.set(true);
+        self.window.set_opacity(1.0);
+        self.window.fullscreen();
+        self.window.present();
 
-        // Start animation loop
+        tracing::info!("Presenting fullscreen highlight overlay");
+
+        // Start animation loop with X11 cursor tracking
         self.start_animation_loop(duration);
     }
 
     /// Hide the highlight
     pub fn hide(&mut self) {
-        self.window.set_visible(false);
         self.is_visible.set(false);
+        self.window.set_opacity(0.0);
+        self.window.set_visible(false);
     }
 
     /// Update position while visible
     pub fn update_position(&mut self, x: f64, y: f64) {
-        self.position.set((x, y));
-        self.drawing_area.queue_draw();
+        self.cursor_position.set((x, y));
+        if self.is_visible.get() {
+            self.drawing_area.queue_draw();
+        }
     }
 
-    /// Start the animation loop
+    /// Start the animation loop with X11 cursor position tracking
     fn start_animation_loop(&self, duration: f64) {
         let drawing_area = self.drawing_area.clone();
         let animation = self.animation.clone();
         let is_visible = self.is_visible.clone();
         let window = self.window.clone();
+        let cursor_position = self.cursor_position.clone();
 
         let duration_ms = (duration * 1000.0) as u64;
         let start = Instant::now();
@@ -173,8 +215,14 @@ impl HighlightOverlay {
             // Check if highlight duration has elapsed
             if start.elapsed().as_millis() as u64 >= duration_ms {
                 window.set_visible(false);
+                window.set_opacity(0.0);
                 is_visible.set(false);
                 return ControlFlow::Break;
+            }
+
+            // Query current cursor position from X11
+            if let Some((x, y)) = get_x11_cursor_position() {
+                cursor_position.set((x, y));
             }
 
             // Update animation state
@@ -187,7 +235,6 @@ impl HighlightOverlay {
                     if cycle_duration > 0.0 {
                         let raw_progress = (elapsed % cycle_duration) / cycle_duration;
 
-                        // Handle auto-reverse
                         if anim.style.auto_reverse {
                             let cycle = (elapsed / cycle_duration) as u32;
                             anim.is_reversing = cycle % 2 == 1;
@@ -200,10 +247,8 @@ impl HighlightOverlay {
                             anim.progress = raw_progress;
                         }
 
-                        // Apply easing
                         anim.progress = anim.style.easing.apply(anim.progress);
 
-                        // Check repeat count
                         let cycle = (elapsed / cycle_duration) as u32;
                         if anim.style.repeat_count > 0 && cycle >= anim.style.repeat_count {
                             anim.progress = 1.0;
@@ -217,23 +262,14 @@ impl HighlightOverlay {
         });
     }
 
-    /// Draw the highlight
-    fn draw(
+    /// Draw the highlight at cursor position
+    fn draw_highlight(
         cr: &Context,
-        width: i32,
-        height: i32,
+        cursor_x: f64,
+        cursor_y: f64,
         style: &CursorStyle,
         animation: &AnimationState,
-        _position: (f64, f64),
     ) {
-        // Clear background
-        cr.set_operator(cairo::Operator::Clear);
-        cr.paint().ok();
-        cr.set_operator(cairo::Operator::Over);
-
-        let center_x = width as f64 / 2.0;
-        let center_y = height as f64 / 2.0;
-
         // Apply animation
         let (alpha, scale) = match animation.style.animation_type {
             AnimationType::None => (style.color.a as f64, 1.0),
@@ -265,7 +301,7 @@ impl HighlightOverlay {
             let glow_size = size + style.glow_radius * 2.0;
 
             cr.set_source_rgba(r, g, b, glow_alpha);
-            cr.arc(center_x, center_y, glow_size / 2.0, 0.0, 2.0 * PI);
+            cr.arc(cursor_x, cursor_y, glow_size / 2.0, 0.0, 2.0 * PI);
             cr.fill().ok();
         }
 
@@ -273,13 +309,19 @@ impl HighlightOverlay {
         match style.shape {
             Shape::Circle => {
                 cr.set_source_rgba(r, g, b, alpha);
-                cr.arc(center_x, center_y, size / 2.0, 0.0, 2.0 * PI);
+                cr.arc(cursor_x, cursor_y, size / 2.0, 0.0, 2.0 * PI);
                 cr.fill().ok();
             }
             Shape::Ring => {
                 cr.set_source_rgba(r, g, b, alpha);
                 cr.set_line_width(style.border_weight);
-                cr.arc(center_x, center_y, size / 2.0 - style.border_weight / 2.0, 0.0, 2.0 * PI);
+                cr.arc(
+                    cursor_x,
+                    cursor_y,
+                    size / 2.0 - style.border_weight / 2.0,
+                    0.0,
+                    2.0 * PI,
+                );
                 cr.stroke().ok();
             }
             Shape::Crosshair => {
@@ -287,23 +329,22 @@ impl HighlightOverlay {
                 cr.set_line_width(style.border_weight);
 
                 // Horizontal line
-                cr.move_to(center_x - size / 2.0, center_y);
-                cr.line_to(center_x + size / 2.0, center_y);
+                cr.move_to(cursor_x - size / 2.0, cursor_y);
+                cr.line_to(cursor_x + size / 2.0, cursor_y);
 
                 // Vertical line
-                cr.move_to(center_x, center_y - size / 2.0);
-                cr.line_to(center_x, center_y + size / 2.0);
+                cr.move_to(cursor_x, cursor_y - size / 2.0);
+                cr.line_to(cursor_x, cursor_y + size / 2.0);
 
                 cr.stroke().ok();
             }
             Shape::Spotlight => {
-                // Radial gradient from center
                 let pattern = cairo::RadialGradient::new(
-                    center_x,
-                    center_y,
+                    cursor_x,
+                    cursor_y,
                     0.0,
-                    center_x,
-                    center_y,
+                    cursor_x,
+                    cursor_y,
                     size / 2.0,
                 );
                 pattern.add_color_stop_rgba(0.0, r, g, b, alpha * 0.8);
@@ -311,7 +352,7 @@ impl HighlightOverlay {
                 pattern.add_color_stop_rgba(1.0, r, g, b, 0.0);
 
                 cr.set_source(&pattern).ok();
-                cr.arc(center_x, center_y, size / 2.0, 0.0, 2.0 * PI);
+                cr.arc(cursor_x, cursor_y, size / 2.0, 0.0, 2.0 * PI);
                 cr.fill().ok();
             }
         }

@@ -78,15 +78,17 @@ impl DisplayManager {
         }
 
         tracing::info!("Found {} displays", self.displays.len());
-        for display in &self.displays {
-            tracing::debug!(
-                "  {}: {}x{} at ({}, {}), scale {}",
-                display.name,
-                display.width,
-                display.height,
-                display.x,
-                display.y,
-                display.scale_factor
+        for disp in &self.displays {
+            tracing::info!(
+                "  Display {}: {}x{} at ({}, {}), scale {}, center=({}, {})",
+                disp.name,
+                disp.width,
+                disp.height,
+                disp.x,
+                disp.y,
+                disp.scale_factor,
+                disp.x + disp.width / 2,
+                disp.y + disp.height / 2
             );
         }
     }

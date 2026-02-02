@@ -62,12 +62,14 @@ impl CursorFinderService {
 
     /// Show highlight at a specific position
     pub fn show_highlight_at(&mut self, x: f64, y: f64) {
-        tracing::debug!("Showing highlight at ({}, {})", x, y);
+        tracing::info!("Showing highlight at ({}, {})", x, y);
 
         // Create or update overlay
         if self.overlay.is_none() {
+            tracing::info!("Creating new highlight overlay");
             match HighlightOverlay::new() {
                 Ok(overlay) => {
+                    tracing::info!("Highlight overlay created successfully");
                     self.overlay = Some(overlay);
                 }
                 Err(e) => {

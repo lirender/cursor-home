@@ -1,12 +1,13 @@
 //! Settings window UI
 
-use crate::models::{AnimationType, CursorStyle, Preferences, Shape};
+use crate::models::{AnimationType, Preferences, Shape};
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Box as GtkBox, Button, CheckButton, ColorButton, ComboBoxText, Grid, Label,
-    Orientation, Scale, SpinButton, Window,
+    Box as GtkBox, CheckButton, ColorButton, ComboBoxText, Label,
+    Orientation, Scale, SpinButton,
 };
 use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::sync::Arc;
 
 /// Settings window for CursorHome
