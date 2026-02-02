@@ -27,9 +27,6 @@ struct GeneralSettingsView: View {
 
             Section("Startup") {
                 Toggle("Launch at Login", isOn: $preferences.launchAtLogin)
-                    .onChange(of: preferences.launchAtLogin) { _, newValue in
-                        LaunchAtLoginManager.setEnabled(newValue)
-                    }
 
                 Toggle("Show in Dock", isOn: $preferences.showInDock)
                     .onChange(of: preferences.showInDock) { _, newValue in

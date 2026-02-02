@@ -30,7 +30,13 @@ final class CursorFinderService {
         }
 
         let currentLocation = displayManager.cursorLocation
-        guard let currentScreen = displayManager.currentCursorScreen else { return }
+
+        // Synergy 3 compatibility: If cursor is not on any local screen
+        // (e.g., it's on another computer via Synergy), bring it back to main display
+        guard let currentScreen = displayManager.currentCursorScreen else {
+            teleportToMainDisplayCenter()
+            return
+        }
 
         showHighlight(at: currentLocation, on: currentScreen)
     }
@@ -73,7 +79,20 @@ final class CursorFinderService {
 
         // Convert to CG coordinates for CGWarpMouseCursorPosition
         let centerCG = displayManager.centerPointInCGCoordinates(of: mainScreen)
+
+        // Synergy 3 compatibility: Disassociate mouse from cursor position before warping
+        // This allows Synergy to properly track the programmatic cursor movement
+        CGAssociateMouseAndMouseCursorPosition(0)
+
         CGWarpMouseCursorPosition(centerCG)
+
+        // Post a mouse moved event to notify Synergy and other software of the position change
+        if let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: centerCG, mouseButton: .left) {
+            moveEvent.post(tap: .cghidEventTap)
+        }
+
+        // Re-associate mouse with cursor position
+        CGAssociateMouseAndMouseCursorPosition(1)
 
         // Show highlight at new position
         let centerNS = displayManager.centerPoint(of: mainScreen)
@@ -120,9 +139,9 @@ final class MouseShakeDetector {
     private var previousLocations: [(point: CGPoint, time: TimeInterval)] = []
     private let onShakeDetected: () -> Void
 
-    private let shakeThreshold: CGFloat = 400 // pixels per second
-    private let shakeWindowDuration: TimeInterval = 0.5
-    private let minimumDirectionChanges = 3
+    private let shakeThreshold: CGFloat = 600 // pixels per second
+    private let shakeWindowDuration: TimeInterval = 0.4
+    private let minimumDirectionChanges = 4
 
     init(onShakeDetected: @escaping () -> Void) {
         self.onShakeDetected = onShakeDetected

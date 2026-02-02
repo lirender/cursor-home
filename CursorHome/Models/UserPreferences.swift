@@ -63,7 +63,10 @@ final class UserPreferences {
 
     // MARK: - General
     var launchAtLogin: Bool {
-        didSet { save() }
+        didSet {
+            save()
+            LaunchAtLoginManager.setEnabled(launchAtLogin)
+        }
     }
 
     var showInDock: Bool {
@@ -121,8 +124,16 @@ final class UserPreferences {
         self.highlightDuration = defaults.double(forKey: "highlightDuration").nonZero ?? 5.0
         self.autoHighlightOnShake = defaults.object(forKey: "autoHighlightOnShake") as? Bool ?? true
 
-        // General
-        self.launchAtLogin = defaults.bool(forKey: "launchAtLogin")
+        // General - sync with actual system state for launch at login
+        // Enable by default on first launch
+        let isFirstLaunch = !defaults.bool(forKey: "hasLaunchedBefore")
+        if isFirstLaunch {
+            defaults.set(true, forKey: "hasLaunchedBefore")
+            LaunchAtLoginManager.setEnabled(true)
+            self.launchAtLogin = true
+        } else {
+            self.launchAtLogin = LaunchAtLoginManager.isEnabled
+        }
         self.showInDock = defaults.bool(forKey: "showInDock")
         self.enabled = defaults.object(forKey: "enabled") as? Bool ?? true
     }
