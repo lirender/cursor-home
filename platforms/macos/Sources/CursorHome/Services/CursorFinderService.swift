@@ -23,17 +23,16 @@ final class CursorFinderService {
     func findCursor() {
         guard preferences.enabled else { return }
 
-        // If highlight is already active, teleport to center of main display
-        if isHighlightActive {
-            teleportToMainDisplayCenter()
+        let currentLocation = displayManager.cursorLocation
+
+        // If cursor is not on any local screen (e.g., on another computer via Synergy),
+        // do nothing - don't highlight or teleport
+        guard let currentScreen = displayManager.currentCursorScreen else {
             return
         }
 
-        let currentLocation = displayManager.cursorLocation
-
-        // Synergy 3 compatibility: If cursor is not on any local screen
-        // (e.g., it's on another computer via Synergy), bring it back to main display
-        guard let currentScreen = displayManager.currentCursorScreen else {
+        // If highlight is already active, teleport to center of main display
+        if isHighlightActive {
             teleportToMainDisplayCenter()
             return
         }
@@ -148,6 +147,13 @@ final class MouseShakeDetector {
     private let shakeWindowDuration: TimeInterval = 0.4
     private let minimumDirectionChanges = 4
 
+    // Edge detection for Synergy transitions
+    private let edgeThreshold: CGFloat = 50  // pixels from screen edge
+    private var lastEdgeTime: TimeInterval = 0
+    private let edgeCooldown: TimeInterval = 0.5  // ignore shakes for 0.5s after edge entry
+    private var lastKnownLocation: CGPoint?
+    private let jumpThreshold: CGFloat = 200  // detect large cursor jumps
+
     /// Sensitivity from 0.0 (least sensitive) to 1.0 (most sensitive)
     var sensitivity: Double = 0.5
 
@@ -185,6 +191,32 @@ final class MouseShakeDetector {
         let currentLocation = NSEvent.mouseLocation
         let currentTime = Date().timeIntervalSince1970
 
+        // Check for large cursor jump (Synergy transition detection)
+        if let lastLocation = lastKnownLocation {
+            let dx = currentLocation.x - lastLocation.x
+            let dy = currentLocation.y - lastLocation.y
+            let distance = sqrt(dx * dx + dy * dy)
+            if distance > jumpThreshold {
+                lastEdgeTime = currentTime
+                previousLocations.removeAll()
+                lastKnownLocation = currentLocation
+                return
+            }
+        }
+        lastKnownLocation = currentLocation
+
+        // Check if cursor is near screen edge (Synergy transition detection)
+        if isNearScreenEdge(currentLocation) {
+            lastEdgeTime = currentTime
+            previousLocations.removeAll()
+            return
+        }
+
+        // Skip shake detection during cooldown after edge entry
+        if currentTime - lastEdgeTime < edgeCooldown {
+            return
+        }
+
         // Add current location
         previousLocations.append((currentLocation, currentTime))
 
@@ -201,6 +233,22 @@ final class MouseShakeDetector {
                 self.onShakeDetected()
             }
         }
+    }
+
+    private func isNearScreenEdge(_ point: CGPoint) -> Bool {
+        for screen in NSScreen.screens {
+            let frame = screen.frame
+            // Check if point is within edgeThreshold of any screen edge
+            let nearLeft = point.x < frame.minX + edgeThreshold
+            let nearRight = point.x > frame.maxX - edgeThreshold
+            let nearBottom = point.y < frame.minY + edgeThreshold
+            let nearTop = point.y > frame.maxY - edgeThreshold
+
+            if frame.contains(point) && (nearLeft || nearRight || nearBottom || nearTop) {
+                return true
+            }
+        }
+        return false
     }
 
     private func detectShake() -> Bool {

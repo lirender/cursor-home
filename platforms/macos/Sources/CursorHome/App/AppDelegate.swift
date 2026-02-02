@@ -61,15 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupSynergyMonitoring() {
-        // When cursor returns from a remote machine, highlight it
-        synergyMonitor.onCursorReturned = { [weak self] screenName in
-            guard let self = self, self.preferences.enabled else { return }
-            // Brief delay to allow cursor position to stabilize
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.cursorFinder.findCursor()
-            }
-        }
-
+        // Start monitoring Synergy for cursor transitions (for future use)
+        // Note: Auto-highlight on return is disabled - use hotkey or shake instead
         synergyMonitor.start()
     }
 }
