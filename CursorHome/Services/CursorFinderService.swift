@@ -102,7 +102,7 @@ final class CursorFinderService {
     // MARK: - Shake Detection
 
     private func setupShakeDetection() {
-        shakeDetector = MouseShakeDetector { [weak self] in
+        shakeDetector = MouseShakeDetector(sensitivity: preferences.shakeSensitivity) { [weak self] in
             guard let self = self,
                   self.preferences.enabled,
                   self.preferences.autoHighlightOnShake else { return }
@@ -117,6 +117,10 @@ final class CursorFinderService {
         } else {
             shakeDetector?.stop()
         }
+    }
+
+    func updateShakeSensitivity() {
+        shakeDetector?.sensitivity = preferences.shakeSensitivity
     }
 
     // MARK: - Window Management
@@ -139,11 +143,25 @@ final class MouseShakeDetector {
     private var previousLocations: [(point: CGPoint, time: TimeInterval)] = []
     private let onShakeDetected: () -> Void
 
-    private let shakeThreshold: CGFloat = 600 // pixels per second
+    // Base values for shake detection (at sensitivity 0.5)
+    private let baseShakeThreshold: CGFloat = 600
     private let shakeWindowDuration: TimeInterval = 0.4
     private let minimumDirectionChanges = 4
 
-    init(onShakeDetected: @escaping () -> Void) {
+    /// Sensitivity from 0.0 (least sensitive) to 1.0 (most sensitive)
+    var sensitivity: Double = 0.5
+
+    /// Computed threshold based on sensitivity
+    /// Higher sensitivity = lower threshold (easier to trigger)
+    private var shakeThreshold: CGFloat {
+        // Range: 900 (low sensitivity) to 300 (high sensitivity)
+        let minThreshold: CGFloat = 300
+        let maxThreshold: CGFloat = 900
+        return maxThreshold - CGFloat(sensitivity) * (maxThreshold - minThreshold)
+    }
+
+    init(sensitivity: Double = 0.5, onShakeDetected: @escaping () -> Void) {
+        self.sensitivity = sensitivity
         self.onShakeDetected = onShakeDetected
     }
 

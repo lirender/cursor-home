@@ -61,6 +61,11 @@ final class UserPreferences {
         didSet { save() }
     }
 
+    /// Shake sensitivity: 0.0 (least sensitive) to 1.0 (most sensitive)
+    var shakeSensitivity: Double {
+        didSet { save() }
+    }
+
     // MARK: - General
     var launchAtLogin: Bool {
         didSet {
@@ -123,6 +128,7 @@ final class UserPreferences {
         // Behavior
         self.highlightDuration = defaults.double(forKey: "highlightDuration").nonZero ?? 5.0
         self.autoHighlightOnShake = defaults.object(forKey: "autoHighlightOnShake") as? Bool ?? true
+        self.shakeSensitivity = defaults.object(forKey: "shakeSensitivity") as? Double ?? 0.5
 
         // General - sync with actual system state for launch at login
         // Enable by default on first launch
@@ -165,6 +171,7 @@ final class UserPreferences {
 
         defaults.set(highlightDuration, forKey: "highlightDuration")
         defaults.set(autoHighlightOnShake, forKey: "autoHighlightOnShake")
+        defaults.set(shakeSensitivity, forKey: "shakeSensitivity")
 
         defaults.set(launchAtLogin, forKey: "launchAtLogin")
         defaults.set(showInDock, forKey: "showInDock")

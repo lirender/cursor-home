@@ -20,6 +20,19 @@ struct GeneralSettingsView: View {
                         CursorFinderService.shared.updateShakeDetection()
                     }
 
+                if preferences.autoHighlightOnShake {
+                    HStack {
+                        Text("Shake Sensitivity")
+                        Slider(value: $preferences.shakeSensitivity, in: 0...1, step: 0.1)
+                            .onChange(of: preferences.shakeSensitivity) { _, _ in
+                                CursorFinderService.shared.updateShakeSensitivity()
+                            }
+                        Text(sensitivityLabel)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 50, alignment: .trailing)
+                    }
+                }
+
                 Text("Automatically highlight the cursor when you shake the mouse rapidly.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -81,11 +94,20 @@ struct GeneralSettingsView: View {
         .padding()
     }
 
+    private var sensitivityLabel: String {
+        switch preferences.shakeSensitivity {
+        case 0..<0.3: return "Low"
+        case 0.3..<0.7: return "Medium"
+        default: return "High"
+        }
+    }
+
     private func resetAllSettings() {
         preferences.cursorStyle = .default
         preferences.animationStyle = .default
         preferences.highlightDuration = 5.0
         preferences.autoHighlightOnShake = true
+        preferences.shakeSensitivity = 0.5
         preferences.magnifierEnabled = false
         preferences.magnifierZoom = 2.0
         preferences.magnifierSize = 150.0
@@ -93,5 +115,6 @@ struct GeneralSettingsView: View {
         preferences.enabled = true
         HotkeyManager.shared.updateHotkeys()
         CursorFinderService.shared.updateShakeDetection()
+        CursorFinderService.shared.updateShakeSensitivity()
     }
 }
