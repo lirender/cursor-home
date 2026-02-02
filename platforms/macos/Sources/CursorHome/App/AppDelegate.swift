@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let cursorFinder = CursorFinderService.shared
     private let hotkeyManager = HotkeyManager.shared
     private let magnifierService = MagnifierService.shared
+    private let synergyMonitor = SynergyMonitor.shared
     private let preferences = UserPreferences.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -28,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup cursor finder (shake detection)
         cursorFinder.setup()
 
+        // Setup Synergy 3 monitoring for cross-machine cursor transitions
+        setupSynergyMonitoring()
+
         // Apply launch at login setting
         if preferences.launchAtLogin != LaunchAtLoginManager.isEnabled {
             LaunchAtLoginManager.setEnabled(preferences.launchAtLogin)
@@ -37,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         cursorFinder.hideAllHighlights()
         magnifierService.hide()
+        synergyMonitor.stop()
     }
 
     private func setupHotkeys() {
@@ -53,5 +58,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleFindCursor() {
         cursorFinder.findCursor()
+    }
+
+    private func setupSynergyMonitoring() {
+        // When cursor returns from a remote machine, highlight it
+        synergyMonitor.onCursorReturned = { [weak self] screenName in
+            guard let self = self, self.preferences.enabled else { return }
+            // Brief delay to allow cursor position to stabilize
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.cursorFinder.findCursor()
+            }
+        }
+
+        synergyMonitor.start()
     }
 }

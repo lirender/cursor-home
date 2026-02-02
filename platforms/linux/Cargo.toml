@@ -1,0 +1,63 @@
+[package]
+name = "cursorhome"
+version = "0.1.0"
+edition = "2021"
+authors = ["CursorHome Contributors"]
+description = "A cursor highlighting utility for Linux (Wayland)"
+license = "MIT"
+repository = "https://github.com/yourusername/CursorHome"
+
+[dependencies]
+# GTK4 for UI
+gtk4 = "0.7"
+libadwaita = { version = "0.5", features = ["v1_4"] }
+
+# Wayland support
+wayland-client = "0.31"
+wayland-protocols = { version = "0.31", features = ["client", "staging", "unstable"] }
+wayland-protocols-wlr = { version = "0.2", features = ["client"] }
+smithay-client-toolkit = { version = "0.18", features = ["calloop"] }
+
+# Portal APIs for screen capture (sandboxed)
+ashpd = { version = "0.6", features = ["gtk4"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# XDG directories for config
+directories = "5"
+
+# Desktop notifications
+notify-rust = "4"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# File watching
+notify = "6"
+
+# Regex for log parsing
+regex = "1"
+
+# Additional directory helpers
+dirs = "5"
+
+# System tray
+ksni = "0.2"
+
+# Event loop integration
+calloop = "0.12"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"

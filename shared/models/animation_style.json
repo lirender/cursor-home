@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AnimationStyle",
+  "description": "Defines animation behavior for cursor highlight",
+
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["none", "pulse", "ripple", "fade", "scale"],
+      "default": "pulse",
+      "description": "Type of animation to apply"
+    },
+    "duration": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 5.0,
+      "default": 0.8,
+      "description": "Duration of one animation cycle in seconds"
+    },
+    "easing": {
+      "type": "string",
+      "enum": ["linear", "ease_in", "ease_out", "ease_in_out"],
+      "default": "ease_in_out",
+      "description": "Timing function for the animation"
+    },
+    "repeat_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "Number of times to repeat (0 = infinite until dismissed)"
+    },
+    "auto_reverse": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether animation should reverse on each cycle"
+    },
+    "initial_delay": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2.0,
+      "default": 0,
+      "description": "Delay before animation starts in seconds"
+    }
+  },
+  "required": ["type"],
+
+  "animation_descriptions": {
+    "none": "No animation, static highlight",
+    "pulse": "Opacity fades in and out rhythmically",
+    "ripple": "Expanding circles emanate from center",
+    "fade": "Smooth fade in on appear, fade out on dismiss",
+    "scale": "Size grows and shrinks rhythmically"
+  },
+
+  "easing_descriptions": {
+    "linear": "Constant speed throughout",
+    "ease_in": "Starts slow, accelerates",
+    "ease_out": "Starts fast, decelerates",
+    "ease_in_out": "Slow start and end, fast middle"
+  },
+
+  "examples": [
+    {
+      "name": "Default Pulse",
+      "type": "pulse",
+      "duration": 0.8,
+      "easing": "ease_in_out",
+      "repeat_count": 3,
+      "auto_reverse": true
+    },
+    {
+      "name": "Continuous Ripple",
+      "type": "ripple",
+      "duration": 1.2,
+      "easing": "ease_out",
+      "repeat_count": 0,
+      "auto_reverse": false
+    },
+    {
+      "name": "Quick Fade",
+      "type": "fade",
+      "duration": 0.3,
+      "easing": "ease_out",
+      "repeat_count": 1
+    },
+    {
+      "name": "Breathing Scale",
+      "type": "scale",
+      "duration": 1.0,
+      "easing": "ease_in_out",
+      "repeat_count": 5,
+      "auto_reverse": true
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CursorStyle",
+  "description": "Defines the visual appearance of the cursor highlight",
+
+  "type": "object",
+  "properties": {
+    "shape": {
+      "type": "string",
+      "enum": ["circle", "ring", "crosshair", "spotlight"],
+      "default": "ring",
+      "description": "The shape of the cursor highlight"
+    },
+    "size": {
+      "type": "number",
+      "minimum": 20,
+      "maximum": 200,
+      "default": 60,
+      "description": "Diameter of the highlight in pixels"
+    },
+    "color": {
+      "type": "object",
+      "properties": {
+        "r": { "type": "integer", "minimum": 0, "maximum": 255, "default": 255 },
+        "g": { "type": "integer", "minimum": 0, "maximum": 255, "default": 149 },
+        "b": { "type": "integer", "minimum": 0, "maximum": 255, "default": 0 },
+        "a": { "type": "number", "minimum": 0, "maximum": 1, "default": 1.0 }
+      },
+      "default": { "r": 255, "g": 149, "b": 0, "a": 1.0 },
+      "description": "RGBA color for the highlight"
+    },
+    "border_weight": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 4,
+      "description": "Border thickness in pixels (for ring and crosshair shapes)"
+    },
+    "border_style": {
+      "type": "string",
+      "enum": ["solid", "dashed", "dotted"],
+      "default": "solid",
+      "description": "Style of the border stroke"
+    },
+    "glow_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to show a glow effect around the highlight"
+    },
+    "glow_intensity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "description": "Intensity of the glow effect (0 = none, 1 = maximum)"
+    },
+    "glow_radius": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 50,
+      "default": 10,
+      "description": "Blur radius of the glow in pixels"
+    }
+  },
+  "required": ["shape", "size", "color"],
+
+  "examples": [
+    {
+      "name": "Default Orange Ring",
+      "shape": "ring",
+      "size": 60,
+      "color": { "r": 255, "g": 149, "b": 0, "a": 1.0 },
+      "border_weight": 4,
+      "border_style": "solid",
+      "glow_enabled": true,
+      "glow_intensity": 0.5
+    },
+    {
+      "name": "Blue Spotlight",
+      "shape": "spotlight",
+      "size": 100,
+      "color": { "r": 0, "g": 122, "b": 255, "a": 0.3 },
+      "glow_enabled": false
+    },
+    {
+      "name": "Red Crosshair",
+      "shape": "crosshair",
+      "size": 40,
+      "color": { "r": 255, "g": 59, "b": 48, "a": 1.0 },
+      "border_weight": 2,
+      "border_style": "solid",
+      "glow_enabled": true,
+      "glow_intensity": 0.8
+    }
+  ]
+}

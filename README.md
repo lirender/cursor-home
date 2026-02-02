@@ -1,80 +1,164 @@
 # CursorHome
 
-A lightweight macOS menu bar app that helps you locate and center your cursor across multiple displays.
+A cross-platform cursor highlighting utility that helps you locate your cursor across multiple displays and machines.
+
+## Overview
+
+CursorHome solves the common problem of losing track of your cursor when working with large screens, multiple displays, or multi-machine setups with Synergy. It provides:
+
+- Visual cursor highlighting with customizable shapes and animations
+- Shake-to-find gesture detection
+- Cross-machine cursor tracking via Synergy 3 integration
+- Native implementations for macOS and Linux (Wayland)
+
+## Platforms
+
+| Platform | Technology | Status |
+|----------|------------|--------|
+| [macOS](platforms/macos/) | Swift, SwiftUI, AppKit | ✅ Ready |
+| [Linux (Wayland)](platforms/linux/) | Rust, GTK4, Libadwaita | ✅ Ready |
 
 ## Features
 
-- **Find Cursor**: Instantly locate and highlight your cursor position
-- **Center on Main Display**: Smoothly animate cursor to the center of your main screen
-- **Customizable Appearance**: Shape, size, color, border, and glow effects
-- **Animations**: Pulse, ripple, fade, and scale effects
-- **Magnifier**: Zoom in around your cursor location
-- **Global Hotkey**: Customizable keyboard shortcut (default: ⌘⇧F)
-- **Apple Shortcuts**: Siri and Shortcuts.app integration
-- **Menu Bar App**: Lightweight, always accessible
-- **Quick Toggle**: Option-click menu bar icon to enable/disable
+### Cursor Highlighting
+- **Shapes**: Circle, ring, crosshair, spotlight
+- **Size**: Adjustable diameter (20px - 200px)
+- **Colors**: Full color picker with opacity control
+- **Border**: Weight, style (solid, dashed, dotted), glow effect
 
-## Requirements
+### Animations
+- Pulse, ripple, fade, and scale effects
+- Configurable duration and easing
+- Smooth 60fps rendering
 
-- macOS 14.0 (Sonoma) or later
-- Accessibility permission (for cursor control and global hotkeys)
+### Shake Detection
+- Find your cursor by shaking the mouse
+- Adjustable sensitivity
 
-## Building
+### Synergy 3 Integration
+- Automatic cursor highlighting when transitioning between machines
+- Cross-platform communication protocol
+- Works seamlessly with Synergy 3 setups
 
-### Using Swift Package Manager
+## Project Structure
+
+```
+CursorHome/
+├── platforms/
+│   ├── macos/          # macOS application (Swift)
+│   │   ├── Package.swift
+│   │   ├── Sources/CursorHome/
+│   │   └── README.md
+│   │
+│   └── linux/          # Linux application (Rust + GTK4)
+│       ├── Cargo.toml
+│       ├── src/
+│       └── README.md
+│
+├── shared/             # Cross-platform definitions
+│   ├── protocol/       # Communication protocol schemas
+│   │   ├── messages.json
+│   │   └── README.md
+│   └── models/         # Shared data model schemas
+│       ├── cursor_style.json
+│       └── animation_style.json
+│
+├── CLAUDE.md           # Development instructions
+└── README.md           # This file
+```
+
+## Quick Start
+
+### macOS
 
 ```bash
-# Clone the repository
-cd CursorHome
-
-# Build the project
+cd platforms/macos
 swift build
-
-# Run
 swift run CursorHome
 ```
 
-### Using Xcode
+Requirements: macOS 14.0+, Xcode Command Line Tools
 
-1. Open the folder in Xcode: `File > Open > CursorHome folder`
-2. Or generate an Xcode project: `swift package generate-xcodeproj`
-3. Build and run (⌘R)
+### Linux (Wayland)
 
-## Usage
+```bash
+cd platforms/linux
+cargo build
+cargo run
+```
 
-1. **Launch the app** - CursorHome appears in your menu bar
-2. **Grant Accessibility permission** when prompted
-3. **Press ⌘⇧F** to find and center your cursor
-4. **Hold Option + ⌘⇧F** to highlight without centering
-5. **Right-click** the menu bar icon for options
-6. **Option-click** the menu bar icon to quickly enable/disable
+Requirements: GTK4, Libadwaita, Wayland development libraries
 
-## Keyboard Shortcuts
+See platform-specific READMEs for detailed installation instructions.
 
+## Synergy Setup
+
+For cross-machine cursor tracking:
+
+1. Install and configure [Synergy 3](https://symless.com/synergy)
+2. Run CursorHome on both machines
+3. Cursor highlighting will automatically trigger when moving between machines
+
+## Default Keyboard Shortcuts
+
+### macOS
 | Shortcut | Action |
 |----------|--------|
 | ⌘⇧F | Find and center cursor |
 | ⌥⌘⇧F | Highlight cursor only |
 | ⌘⇧M | Toggle magnifier |
 
-## Settings
-
-Access settings by right-clicking the menu bar icon and selecting "Settings...":
-
-- **Appearance**: Shape, size, color, border, glow
-- **Animation**: Type, duration, easing, repeat count
-- **Magnifier**: Zoom, size, quality
-- **Shortcuts**: Customize hotkeys
-- **General**: Launch at login, show in dock
+### Linux
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Shift+F | Find cursor |
+| Ctrl+, | Open settings |
+| Ctrl+Q | Quit |
 
 ## Use Cases
 
-- Working with multiple displays
-- Screen sharing and presentations
-- Video tutorials and lectures
-- Video calls and meetings
-- Accessibility assistance
+- **Multiple Displays**: Quickly locate cursor across 2+ monitors
+- **Synergy/KVM Users**: Find cursor after switching machines
+- **Screen Sharing**: Make cursor visible to viewers
+- **Presentations**: Highlight cursor for audiences
+- **Accessibility**: Help track cursor movement
+
+## Development
+
+See [CLAUDE.md](CLAUDE.md) for detailed development instructions.
+
+### Building Both Platforms
+
+```bash
+# macOS
+cd platforms/macos && swift build
+
+# Linux
+cd platforms/linux && cargo build
+```
+
+### Running Tests
+
+```bash
+# macOS
+cd platforms/macos && swift test
+
+# Linux
+cd platforms/linux && cargo test
+```
+
+## Protocol Documentation
+
+The cross-platform communication protocol is documented in [shared/protocol/README.md](shared/protocol/README.md). Key message types:
+
+- `cursor_transition`: Cursor moved between machines
+- `highlight_request`: Request highlight on a specific machine
+- `settings_sync`: Synchronize visual settings
 
 ## License
 
 MIT License
+
+## Contributing
+
+Contributions are welcome! Please see the platform-specific READMEs for development setup instructions.

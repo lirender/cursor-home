@@ -16,7 +16,7 @@ let package = Package(
         .executableTarget(
             name: "CursorHome",
             dependencies: ["HotKey"],
-            path: "CursorHome",
+            path: "Sources/CursorHome",
             resources: [
                 .process("Resources/Assets.xcassets")
             ]

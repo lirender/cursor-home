@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CursorHome Cross-Platform Protocol",
+  "description": "Message schema definitions for CursorHome communication between platforms",
+  "version": "1.0.0",
+
+  "definitions": {
+    "position": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "description": "X coordinate" },
+        "y": { "type": "number", "description": "Y coordinate" }
+      },
+      "required": ["x", "y"]
+    },
+
+    "color": {
+      "type": "object",
+      "properties": {
+        "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "a": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["r", "g", "b", "a"]
+    },
+
+    "cursor_style": {
+      "type": "object",
+      "properties": {
+        "shape": {
+          "type": "string",
+          "enum": ["circle", "ring", "crosshair", "spotlight"]
+        },
+        "size": {
+          "type": "number",
+          "minimum": 20,
+          "maximum": 200
+        },
+        "color": { "$ref": "#/definitions/color" },
+        "border_weight": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "border_style": {
+          "type": "string",
+          "enum": ["solid", "dashed", "dotted"]
+        },
+        "glow_enabled": { "type": "boolean" },
+        "glow_intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["shape", "size", "color"]
+    },
+
+    "animation_style": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "pulse", "ripple", "fade", "scale"]
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 5.0
+        },
+        "easing": {
+          "type": "string",
+          "enum": ["linear", "ease_in", "ease_out", "ease_in_out"]
+        },
+        "repeat_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["type"]
+    }
+  },
+
+  "messages": {
+    "cursor_transition": {
+      "description": "Sent when cursor moves between machines",
+      "type": "object",
+      "properties": {
+        "type": { "const": "cursor_transition" },
+        "from": { "type": "string", "description": "Source machine identifier" },
+        "to": { "type": "string", "description": "Destination machine identifier" },
+        "position": { "$ref": "#/definitions/position" },
+        "timestamp": { "type": "integer", "description": "Unix timestamp in milliseconds" }
+      },
+      "required": ["type", "from", "to", "position", "timestamp"]
+    },
+
+    "highlight_request": {
+      "description": "Request to show cursor highlight on a specific machine",
+      "type": "object",
+      "properties": {
+        "type": { "const": "highlight_request" },
+        "target": { "type": "string", "description": "Target machine identifier" },
+        "style": { "$ref": "#/definitions/cursor_style" },
+        "animation": { "$ref": "#/definitions/animation_style" },
+        "duration": { "type": "number", "description": "How long to show highlight in seconds" }
+      },
+      "required": ["type", "target"]
+    },
+
+    "highlight_response": {
+      "description": "Acknowledgment of highlight request",
+      "type": "object",
+      "properties": {
+        "type": { "const": "highlight_response" },
+        "source": { "type": "string", "description": "Machine that handled the request" },
+        "success": { "type": "boolean" },
+        "error": { "type": "string", "description": "Error message if success is false" }
+      },
+      "required": ["type", "source", "success"]
+    },
+
+    "teleport_request": {
+      "description": "Request to move cursor to a specific position on a machine",
+      "type": "object",
+      "properties": {
+        "type": { "const": "teleport_request" },
+        "target": { "type": "string", "description": "Target machine identifier" },
+        "position": { "$ref": "#/definitions/position" },
+        "center_on_main": { "type": "boolean", "description": "If true, position is ignored and cursor moves to center of main display" }
+      },
+      "required": ["type", "target"]
+    },
+
+    "teleport_response": {
+      "description": "Acknowledgment of teleport request",
+      "type": "object",
+      "properties": {
+        "type": { "const": "teleport_response" },
+        "source": { "type": "string", "description": "Machine that handled the request" },
+        "success": { "type": "boolean" },
+        "final_position": { "$ref": "#/definitions/position" },
+        "error": { "type": "string", "description": "Error message if success is false" }
+      },
+      "required": ["type", "source", "success"]
+    },
+
+    "settings_sync": {
+      "description": "Synchronize settings between machines",
+      "type": "object",
+      "properties": {
+        "type": { "const": "settings_sync" },
+        "source": { "type": "string", "description": "Machine sending settings" },
+        "cursor_style": { "$ref": "#/definitions/cursor_style" },
+        "animation_style": { "$ref": "#/definitions/animation_style" },
+        "shake_enabled": { "type": "boolean" },
+        "shake_sensitivity": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["type", "source"]
+    },
+
+    "heartbeat": {
+      "description": "Keep-alive message to detect disconnections",
+      "type": "object",
+      "properties": {
+        "type": { "const": "heartbeat" },
+        "source": { "type": "string" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["type", "source", "timestamp"]
+    }
+  }
+}
