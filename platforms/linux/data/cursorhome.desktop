@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CursorHome
+GenericName=Cursor Highlighter
+Comment=Locate your cursor with visual highlighting and shake detection
+Exec=cursorhome
+Icon=cursorhome
+Categories=Utility;Accessibility;
+Keywords=cursor;highlight;mouse;finder;
+StartupNotify=false
+Terminal=false

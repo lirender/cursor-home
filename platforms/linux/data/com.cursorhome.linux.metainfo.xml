@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.cursorhome.linux</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>CursorHome</name>
+  <summary>Cursor highlighting utility</summary>
+
+  <description>
+    <p>
+      CursorHome helps you locate your cursor when working with large screens,
+      multiple displays, or multi-machine setups with Synergy. It provides visual
+      highlighting, smooth animations, shake detection, and cross-machine cursor tracking.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Multiple highlight shapes: circle, ring, crosshair, spotlight</li>
+      <li>Configurable colors, sizes, and animations</li>
+      <li>Shake-to-find cursor detection</li>
+      <li>Synergy 3 integration for multi-machine setups</li>
+    </ul>
+  </description>
+
+  <categories>
+    <category>Utility</category>
+    <category>Accessibility</category>
+  </categories>
+
+  <url type="homepage">https://github.com/yourusername/CursorHome</url>
+  <url type="bugtracker">https://github.com/yourusername/CursorHome/issues</url>
+
+  <launchable type="desktop-id">cursorhome.desktop</launchable>
+
+  <provides>
+    <binary>cursorhome</binary>
+  </provides>
+
+  <content_rating type="oars-1.1" />
+</component>

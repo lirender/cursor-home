@@ -22,3 +22,9 @@ Package.resolved
 *.swp
 *.swo
 *~
+
+# Packaging artifacts
+platforms/macos/build/
+platforms/linux/build/
+*.dmg
+*.deb
