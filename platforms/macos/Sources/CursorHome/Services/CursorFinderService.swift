@@ -136,150 +136,62 @@ final class CursorFinderService {
 }
 
 // MARK: - Mouse Shake Detector
+// Uses macOS private CGSGetCursorScale API to detect when the system's
+// built-in "Shake mouse pointer to locate" feature activates. This ensures
+// perfect synchronization with macOS's own shake detection.
+
+@_silgen_name("CGSMainConnectionID")
+private func CGSMainConnectionID() -> UInt32
+
+@_silgen_name("CGSGetCursorScale")
+private func CGSGetCursorScale(_ cid: UInt32, _ outScale: UnsafeMutablePointer<CGFloat>) -> Int32
 
 final class MouseShakeDetector {
-    private var eventMonitor: Any?
-    private var previousLocations: [(point: CGPoint, time: TimeInterval)] = []
+    private var pollTimer: DispatchSourceTimer?
     private let onShakeDetected: () -> Void
+    private var wasShaking = false
+    private let connectionID: UInt32
 
-    // Base values for shake detection (at sensitivity 0.5)
-    private let baseShakeThreshold: CGFloat = 600
-    private let shakeWindowDuration: TimeInterval = 0.4
-    private let minimumDirectionChanges = 4
-
-    // Edge detection for Synergy transitions
-    private let edgeThreshold: CGFloat = 50  // pixels from screen edge
-    private var lastEdgeTime: TimeInterval = 0
-    private let edgeCooldown: TimeInterval = 0.5  // ignore shakes for 0.5s after edge entry
-    private var lastKnownLocation: CGPoint?
-    private let jumpThreshold: CGFloat = 200  // detect large cursor jumps
-
-    /// Sensitivity from 0.0 (least sensitive) to 1.0 (most sensitive)
+    /// Sensitivity is kept for API compatibility but is unused —
+    /// we rely on macOS's own detection which respects system preferences.
     var sensitivity: Double = 0.5
-
-    /// Computed threshold based on sensitivity
-    /// Higher sensitivity = lower threshold (easier to trigger)
-    private var shakeThreshold: CGFloat {
-        // Range: 900 (low sensitivity) to 300 (high sensitivity)
-        let minThreshold: CGFloat = 300
-        let maxThreshold: CGFloat = 900
-        return maxThreshold - CGFloat(sensitivity) * (maxThreshold - minThreshold)
-    }
 
     init(sensitivity: Double = 0.5, onShakeDetected: @escaping () -> Void) {
         self.sensitivity = sensitivity
         self.onShakeDetected = onShakeDetected
+        self.connectionID = CGSMainConnectionID()
     }
 
     func start() {
-        guard eventMonitor == nil else { return }
+        guard pollTimer == nil else { return }
 
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            self?.handleMouseMove(event)
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz
+        timer.setEventHandler { [weak self] in
+            self?.poll()
         }
+        timer.resume()
+        pollTimer = timer
     }
 
     func stop() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
-        previousLocations.removeAll()
+        pollTimer?.cancel()
+        pollTimer = nil
+        wasShaking = false
     }
 
-    private func handleMouseMove(_ event: NSEvent) {
-        let currentLocation = NSEvent.mouseLocation
-        let currentTime = Date().timeIntervalSince1970
+    private func poll() {
+        var scale: CGFloat = 0
+        let result = CGSGetCursorScale(connectionID, &scale)
+        guard result == 0 else { return }
 
-        // Check for large cursor jump (Synergy transition detection)
-        if let lastLocation = lastKnownLocation {
-            let dx = currentLocation.x - lastLocation.x
-            let dy = currentLocation.y - lastLocation.y
-            let distance = sqrt(dx * dx + dy * dy)
-            if distance > jumpThreshold {
-                lastEdgeTime = currentTime
-                previousLocations.removeAll()
-                lastKnownLocation = currentLocation
-                return
-            }
+        let isShaking = scale > 1.0
+
+        // Fire once on the rising edge (transition from not-shaking to shaking)
+        if isShaking && !wasShaking {
+            onShakeDetected()
         }
-        lastKnownLocation = currentLocation
-
-        // Check if cursor is near screen edge (Synergy transition detection)
-        if isNearScreenEdge(currentLocation) {
-            lastEdgeTime = currentTime
-            previousLocations.removeAll()
-            return
-        }
-
-        // Skip shake detection during cooldown after edge entry
-        if currentTime - lastEdgeTime < edgeCooldown {
-            return
-        }
-
-        // Add current location
-        previousLocations.append((currentLocation, currentTime))
-
-        // Remove old locations outside the time window
-        previousLocations.removeAll { currentTime - $0.time > shakeWindowDuration }
-
-        // Need at least a few points to detect shake
-        guard previousLocations.count >= 4 else { return }
-
-        // Check for shake pattern (rapid direction changes with high velocity)
-        if detectShake() {
-            previousLocations.removeAll()
-            DispatchQueue.main.async {
-                self.onShakeDetected()
-            }
-        }
-    }
-
-    private func isNearScreenEdge(_ point: CGPoint) -> Bool {
-        for screen in NSScreen.screens {
-            let frame = screen.frame
-            // Check if point is within edgeThreshold of any screen edge
-            let nearLeft = point.x < frame.minX + edgeThreshold
-            let nearRight = point.x > frame.maxX - edgeThreshold
-            let nearBottom = point.y < frame.minY + edgeThreshold
-            let nearTop = point.y > frame.maxY - edgeThreshold
-
-            if frame.contains(point) && (nearLeft || nearRight || nearBottom || nearTop) {
-                return true
-            }
-        }
-        return false
-    }
-
-    private func detectShake() -> Bool {
-        guard previousLocations.count >= 4 else { return false }
-
-        var directionChanges = 0
-        var totalDistance: CGFloat = 0
-
-        for i in 1..<previousLocations.count {
-            let prev = previousLocations[i - 1]
-            let curr = previousLocations[i]
-
-            let dx = curr.point.x - prev.point.x
-            let distance = abs(dx)
-            totalDistance += distance
-
-            // Check for direction change in X axis (horizontal shake)
-            if i >= 2 {
-                let prevDx = previousLocations[i - 1].point.x - previousLocations[i - 2].point.x
-                if (dx > 0 && prevDx < 0) || (dx < 0 && prevDx > 0) {
-                    directionChanges += 1
-                }
-            }
-        }
-
-        let timeSpan = previousLocations.last!.time - previousLocations.first!.time
-        guard timeSpan > 0 else { return false }
-
-        let velocity = totalDistance / CGFloat(timeSpan)
-
-        return directionChanges >= minimumDirectionChanges && velocity > shakeThreshold
+        wasShaking = isShaking
     }
 
     deinit {
