@@ -136,62 +136,95 @@ final class CursorFinderService {
 }
 
 // MARK: - Mouse Shake Detector
-// Uses macOS private CGSGetCursorScale API to detect when the system's
-// built-in "Shake mouse pointer to locate" feature activates. This ensures
-// perfect synchronization with macOS's own shake detection.
-
-@_silgen_name("CGSMainConnectionID")
-private func CGSMainConnectionID() -> UInt32
-
-@_silgen_name("CGSGetCursorScale")
-private func CGSGetCursorScale(_ cid: UInt32, _ outScale: UnsafeMutablePointer<CGFloat>) -> Int32
+// Detects rapid horizontal mouse shaking by monitoring global mouse move events,
+// tracking direction changes and velocity within a short time window.
 
 final class MouseShakeDetector {
-    private var pollTimer: DispatchSourceTimer?
+    private var eventMonitor: Any?
+    private var previousLocations: [(point: CGPoint, time: TimeInterval)] = []
     private let onShakeDetected: () -> Void
-    private var wasShaking = false
-    private let connectionID: UInt32
 
-    /// Sensitivity is kept for API compatibility but is unused —
-    /// we rely on macOS's own detection which respects system preferences.
+    private let shakeWindowDuration: TimeInterval = 0.4
+    private let minimumDirectionChanges = 4
+
+    /// Sensitivity from 0.0 (least sensitive) to 1.0 (most sensitive)
     var sensitivity: Double = 0.5
+
+    /// Computed threshold based on sensitivity
+    /// Higher sensitivity = lower threshold (easier to trigger)
+    private var shakeThreshold: CGFloat {
+        let minThreshold: CGFloat = 300
+        let maxThreshold: CGFloat = 900
+        return maxThreshold - CGFloat(sensitivity) * (maxThreshold - minThreshold)
+    }
 
     init(sensitivity: Double = 0.5, onShakeDetected: @escaping () -> Void) {
         self.sensitivity = sensitivity
         self.onShakeDetected = onShakeDetected
-        self.connectionID = CGSMainConnectionID()
     }
 
     func start() {
-        guard pollTimer == nil else { return }
+        guard eventMonitor == nil else { return }
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz
-        timer.setEventHandler { [weak self] in
-            self?.poll()
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            self?.handleMouseMove(event)
         }
-        timer.resume()
-        pollTimer = timer
     }
 
     func stop() {
-        pollTimer?.cancel()
-        pollTimer = nil
-        wasShaking = false
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+        previousLocations.removeAll()
     }
 
-    private func poll() {
-        var scale: CGFloat = 0
-        let result = CGSGetCursorScale(connectionID, &scale)
-        guard result == 0 else { return }
+    private func handleMouseMove(_ event: NSEvent) {
+        let currentLocation = NSEvent.mouseLocation
+        let currentTime = Date().timeIntervalSince1970
 
-        let isShaking = scale > 1.0
+        previousLocations.append((currentLocation, currentTime))
 
-        // Fire once on the rising edge (transition from not-shaking to shaking)
-        if isShaking && !wasShaking {
-            onShakeDetected()
+        // Remove old locations outside the time window
+        previousLocations.removeAll { currentTime - $0.time > shakeWindowDuration }
+
+        guard previousLocations.count >= 4 else { return }
+
+        if detectShake() {
+            previousLocations.removeAll()
+            DispatchQueue.main.async {
+                self.onShakeDetected()
+            }
         }
-        wasShaking = isShaking
+    }
+
+    private func detectShake() -> Bool {
+        guard previousLocations.count >= 4 else { return false }
+
+        var directionChanges = 0
+        var totalDistance: CGFloat = 0
+
+        for i in 1..<previousLocations.count {
+            let prev = previousLocations[i - 1]
+            let curr = previousLocations[i]
+
+            let dx = curr.point.x - prev.point.x
+            totalDistance += abs(dx)
+
+            if i >= 2 {
+                let prevDx = previousLocations[i - 1].point.x - previousLocations[i - 2].point.x
+                if (dx > 0 && prevDx < 0) || (dx < 0 && prevDx > 0) {
+                    directionChanges += 1
+                }
+            }
+        }
+
+        let timeSpan = previousLocations.last!.time - previousLocations.first!.time
+        guard timeSpan > 0 else { return false }
+
+        let velocity = totalDistance / CGFloat(timeSpan)
+
+        return directionChanges >= minimumDirectionChanges && velocity > shakeThreshold
     }
 
     deinit {

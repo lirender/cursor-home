@@ -16,7 +16,10 @@ final class DisplayManager {
 
     func updateScreens() {
         screens = NSScreen.screens
-        mainScreen = NSScreen.main ?? screens.first
+        // Use the primary display (CGMainDisplayID) rather than NSScreen.main,
+        // which is the screen with the current key window, not the primary monitor.
+        let primaryID = CGMainDisplayID()
+        mainScreen = screens.first { $0.displayID == primaryID } ?? screens.first
     }
 
     var currentCursorScreen: NSScreen? {
