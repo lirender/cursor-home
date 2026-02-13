@@ -5,7 +5,24 @@
       "Bash(pgrep:*)",
       "Bash(osascript:*)",
       "Bash(osascript -e 'tell application \"\"CursorHome\"\" to activate' -e 'tell application \"\"System Events\"\" to keystroke \"\",\"\" using command down')",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(git push:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(swift run:*)",
+      "Bash(swift package clean:*)",
+      "Bash(bash:*)",
+      "Bash(open:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:forums.macrumors.com)",
+      "WebFetch(domain:www.codejam.info)",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home status)",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home diff)",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home log --oneline -5)",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home add platforms/macos/Sources/CursorHome/Features/Settings/SettingsView.swift platforms/macos/Sources/CursorHome/Models/UserPreferences.swift platforms/macos/Sources/CursorHome/Services/CursorFinderService.swift)",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home commit -m \"$\\(cat <<''EOF''\nUse macOS CGSGetCursorScale API for shake detection, increase default sensitivity, reorder settings tabs\n\nReplace custom shake detection heuristics with polling the system''s\nCGSGetCursorScale private API, ensuring CursorHome activates in perfect\nsync with macOS''s built-in \"shake to locate\" cursor enlargement. Also\nincrease default shake sensitivity from 0.5 to 0.7 and move General\ntab to be the first \\(leftmost\\) settings tab.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/sarvesh/code/claude/mac-cursor-home push origin main)"
     ]
   }
 }
