@@ -144,8 +144,9 @@ final class MouseShakeDetector {
     private var previousLocations: [(point: CGPoint, time: TimeInterval)] = []
     private let onShakeDetected: () -> Void
 
-    private let shakeWindowDuration: TimeInterval = 0.4
-    private let minimumDirectionChanges = 4
+    private let shakeWindowDuration: TimeInterval = 0.6
+    private let minimumDirectionChanges = 3
+    private let minimumMovementThreshold: CGFloat = 5.0
 
     /// Sensitivity from 0.0 (least sensitive) to 1.0 (most sensitive)
     var sensitivity: Double = 0.5
@@ -153,8 +154,8 @@ final class MouseShakeDetector {
     /// Computed threshold based on sensitivity
     /// Higher sensitivity = lower threshold (easier to trigger)
     private var shakeThreshold: CGFloat {
-        let minThreshold: CGFloat = 300
-        let maxThreshold: CGFloat = 900
+        let minThreshold: CGFloat = 200
+        let maxThreshold: CGFloat = 600
         return maxThreshold - CGFloat(sensitivity) * (maxThreshold - minThreshold)
     }
 
@@ -201,19 +202,42 @@ final class MouseShakeDetector {
     private func detectShake() -> Bool {
         guard previousLocations.count >= 4 else { return false }
 
-        var directionChanges = 0
-        var totalDistance: CGFloat = 0
+        // Collapse raw events into "strokes" — segments of sustained movement
+        // in one direction, ignoring micro-jitter below the movement threshold.
+        var strokes: [(dx: CGFloat, startTime: TimeInterval, endTime: TimeInterval)] = []
+        var strokeDx: CGFloat = 0
+        var strokeStart = previousLocations[0].time
 
         for i in 1..<previousLocations.count {
-            let prev = previousLocations[i - 1]
-            let curr = previousLocations[i]
+            let dx = previousLocations[i].point.x - previousLocations[i - 1].point.x
 
-            let dx = curr.point.x - prev.point.x
-            totalDistance += abs(dx)
+            // Same direction or below jitter threshold — extend current stroke
+            if (dx >= 0 && strokeDx >= 0) || (dx <= 0 && strokeDx <= 0) || abs(dx) < minimumMovementThreshold {
+                strokeDx += dx
+            } else {
+                // Direction changed — save the previous stroke if it was significant
+                if abs(strokeDx) >= minimumMovementThreshold {
+                    strokes.append((strokeDx, strokeStart, previousLocations[i - 1].time))
+                }
+                strokeDx = dx
+                strokeStart = previousLocations[i - 1].time
+            }
+        }
+        // Save final stroke
+        if abs(strokeDx) >= minimumMovementThreshold {
+            strokes.append((strokeDx, strokeStart, previousLocations.last!.time))
+        }
 
-            if i >= 2 {
-                let prevDx = previousLocations[i - 1].point.x - previousLocations[i - 2].point.x
-                if (dx > 0 && prevDx < 0) || (dx < 0 && prevDx > 0) {
+        guard strokes.count >= 2 else { return false }
+
+        // Count direction changes between significant strokes
+        var directionChanges = 0
+        var totalDistance: CGFloat = 0
+        for i in 0..<strokes.count {
+            totalDistance += abs(strokes[i].dx)
+            if i >= 1 {
+                if (strokes[i].dx > 0 && strokes[i - 1].dx < 0) ||
+                   (strokes[i].dx < 0 && strokes[i - 1].dx > 0) {
                     directionChanges += 1
                 }
             }
